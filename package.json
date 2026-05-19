@@ -1,0 +1,20 @@
+{
+  "name": "ai-business-audit-system",
+  "version": "1.0.0",
+  "description": "Complete AI-powered business audit system with full automation stack",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "twilio": "^5.3.0",
+    "@sendgrid/mail": "^8.1.4",
+    "resend": "^4.0.0",
+    "@vercel/kv": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
