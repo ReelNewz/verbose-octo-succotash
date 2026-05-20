@@ -1072,3 +1072,443 @@ const AdminAuditDetail = ({ auditId, navigate, showToast }) => {
     </div>
   );
 };
+
+const AdminPipeline = ({ navigate, showToast }) => {
+  const [audits, setAudits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dragId, setDragId] = useState(null);
+
+  const load = async () => {
+    try { const a = await API.listAudits(); setAudits(a.audits || []); }
+    catch (e) { showToast('Failed to load', 'error'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const handleDrop = async (stageId) => {
+    if (!dragId) return;
+    const audit = audits.find(a => a.id === dragId);
+    if (audit && audit.pipelineStage !== stageId) {
+      try {
+        await API.updateStage(dragId, stageId);
+        showToast("Moved to " + PIPELINE_STAGES.find(s => s.id === stageId).name);
+        load();
+      } catch (e) { showToast('Move failed', 'error'); }
+    }
+    setDragId(null);
+  };
+
+  if (loading) return <div className="p-10"><Spinner /></div>;
+
+  const byStage = {};
+  PIPELINE_STAGES.forEach(s => byStage[s.id] = []);
+  audits.forEach(a => { const st = a.pipelineStage || 'requested'; if (byStage[st]) byStage[st].push(a); });
+
+  return (
+    <div className="p-10">
+      <div className="mb-8"><div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div><h1 className="serif text-4xl text-navy font-semibold">Pipeline</h1><p className="text-gray-mid mt-2">Drag cards between stages</p></div>
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto">
+        {PIPELINE_STAGES.map(stage => (
+          <div key={stage.id} className="stage-col p-3" onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(stage.id)}>
+            <div className="mb-3 pb-2 border-b-2" style={{ borderColor: stage.color }}>
+              <div className="text-xs font-bold tracking-wider text-white px-2 py-1" style={{ background: stage.color }}>{stage.name}</div>
+              <div className="text-xs text-gray-mid mt-1.5 px-1">{byStage[stage.id].length} audit{byStage[stage.id].length !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="space-y-2 min-h-[300px]">
+              {byStage[stage.id].map(a => {
+                const r = a.scores ? calculateReadiness(a.scores) : null;
+                return (
+                  <div key={a.id} className="stage-card p-3" draggable onDragStart={() => setDragId(a.id)} onClick={() => navigate('/admin/audits/' + a.id)}>
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="serif text-sm font-semibold text-navy leading-tight flex-1">{a.intake.businessName}</div>
+                      {r && <div className="serif text-lg font-bold ml-2" style={{ color: getStatus(r).color }}>{r}</div>}
+                    </div>
+                    <div className="text-xs text-gray-mid">{a.intake.industry}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: INBOX (UNIFIED MESSAGE VIEW)
+// =========================================================================
+const AdminInbox = ({ navigate, showToast }) => {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try { const r = await API.getMessages(200); setMessages(r.messages || []); }
+      catch (e) { showToast('Failed to load', 'error'); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  if (loading) return <div className="p-10"><Spinner /></div>;
+
+  const filtered = messages.filter(m => {
+    if (filter === 'inbound') return m.direction === 'inbound';
+    if (filter === 'outbound') return m.direction === 'outbound';
+    if (filter === 'ai') return m.aiGenerated;
+    if (filter === 'email') return m.channel === 'email';
+    if (filter === 'sms') return m.channel === 'sms';
+    return true;
+  });
+
+  return (
+    <div className="p-10">
+      <div className="mb-8"><div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div><h1 className="serif text-4xl text-navy font-semibold">Unified Inbox</h1><p className="text-gray-mid mt-2">Every email and SMS, inbound and outbound, AI-generated and manual</p></div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {[['all', 'All'], ['inbound', 'Inbound'], ['outbound', 'Outbound'], ['ai', 'AI-Generated'], ['email', 'Email'], ['sms', 'SMS']].map(([k, l]) => (
+          <button key={k} onClick={() => setFilter(k)} className={"px-4 py-2 text-xs tracking-wider transition " + (filter === k ? "bg-navy text-gold" : "bg-white text-navy border border-gray-light hover:border-gold")}>{l}</button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 bg-white border border-gold max-h-[600px] overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-gray-mid">No messages</div>
+          ) : (
+            filtered.map(m => (
+              <button key={m.id} onClick={() => setSelected(m)} className={"w-full text-left p-4 border-b border-gray-light hover:bg-gold-soft transition " + (selected?.id === m.id ? "bg-gold-soft" : "")}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold tracking-wide" style={{ color: m.direction === 'inbound' ? 'var(--gold)' : 'var(--strong)' }}>
+                    {m.direction === 'inbound' ? '⬇ IN' : '⬆ OUT'}
+                  </span>
+                  <span className="text-xs uppercase tracking-wider text-gray-mid">{m.channel}</span>
+                  {m.aiGenerated && <span className="text-xs px-1.5 py-0.5 bg-dominant text-white" style={{ background: 'var(--dominant)' }}>🤖 AI</span>}
+                  <span className="text-xs text-gray-mid ml-auto">{fmtRelative(m.receivedAt || m.sentAt)}</span>
+                </div>
+                <div className="text-sm font-semibold text-navy truncate">{m.direction === 'inbound' ? m.from : m.to}</div>
+                {m.subject && <div className="text-xs text-navy truncate">{m.subject}</div>}
+                <div className="text-xs text-gray-mid truncate mt-1">{(m.body || '').slice(0, 80)}</div>
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="lg:col-span-2 bg-white border border-gold p-6 max-h-[600px] overflow-y-auto">
+          {selected ? (
+            <div>
+              <div className="flex items-center gap-2 mb-3 text-xs">
+                <span className="font-bold" style={{ color: selected.direction === 'inbound' ? 'var(--gold)' : 'var(--strong)' }}>{selected.direction === 'inbound' ? '⬇ INBOUND' : '⬆ OUTBOUND'}</span>
+                <span className="text-gray-mid">·</span>
+                <span className="uppercase tracking-wider text-navy">{selected.channel}</span>
+                {selected.aiGenerated && <span className="ml-2 px-2 py-0.5 text-white font-bold" style={{ background: 'var(--dominant)' }}>🤖 AI-GENERATED</span>}
+              </div>
+              <div className="text-xs text-gray-mid mb-1">{selected.direction === 'inbound' ? 'From' : 'To'}: <span className="text-navy">{selected.direction === 'inbound' ? selected.from : selected.to}</span></div>
+              {selected.subject && <div className="serif text-xl font-semibold text-navy mb-3">{selected.subject}</div>}
+              {selected.classification && (
+                <div className="bg-gold-soft border border-gold p-3 mb-4 text-xs">
+                  <div className="font-bold text-gold mb-1">AI CLASSIFICATION</div>
+                  <div><strong>Intent:</strong> {selected.classification.intent} ({selected.classification.confidence}% confidence)</div>
+                  <div><strong>Summary:</strong> {selected.classification.summary}</div>
+                </div>
+              )}
+              <div className="prose max-w-none text-navy whitespace-pre-wrap text-sm leading-relaxed border-t border-gold pt-4">{selected.body}</div>
+              {selected.auditId && (
+                <button onClick={() => navigate('/admin/audits/' + selected.auditId)} className="btn-ghost px-4 py-2 text-xs tracking-wider mt-6">→ VIEW AUDIT</button>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-gray-mid py-12">Select a message to view</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: AUTOMATION OVERVIEW
+// =========================================================================
+const AdminAutomation = () => (
+  <div className="p-10">
+    <div className="mb-8"><div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div><h1 className="serif text-4xl text-navy font-semibold">Automation Map</h1></div>
+
+    <div className="bg-white border border-gold p-8 mb-6">
+      <h2 className="serif text-2xl text-navy font-semibold mb-4">The Full Cascade</h2>
+      <div className="space-y-3 text-sm">
+        {[
+          ['1.', 'Form submission', '/api/intake', 'Validates, stores audit, fires 3 parallel webhooks'],
+          ['2a.', 'Instant SMS confirmation', '/api/send-sms', '~5 seconds · Twilio'],
+          ['2b.', 'Instant email confirmation', '/api/send-email', '~5 seconds · SendGrid'],
+          ['2c.', 'AI audit generation', '/api/generate-audit', '~60 seconds · Claude Sonnet 4.5 + Opus 4.7'],
+          ['3.', 'Audit delivery email', '/api/send-email', 'Auto-fires when generation completes'],
+          ['3b.', 'Audit-ready SMS', '/api/send-sms', 'Auto-fires when generation completes'],
+          ['4.', 'Follow-up sequence scheduled', '—', 'D+1, D+3, D+7 stored in KV'],
+          ['5.', 'Daily cron at 14:00 UTC', '/api/cron-followups', 'Fires due follow-ups'],
+          ['6.', 'Weekly cron Mondays at 15:00 UTC', '/api/cron-reactivation', 'D+30/60/90 reactivation'],
+          ['—', 'Inbound email auto-response', '/api/inbound-email', 'SendGrid Parse → Claude → AI replies'],
+          ['—', 'Inbound SMS auto-response', '/api/inbound-sms', 'Twilio webhook → Claude → AI replies'],
+          ['—', 'Inbound voice (AI receptionist)', '/api/inbound-call', 'Vapi handoff OR built-in TwiML']
+        ].map(([step, name, endpoint, detail], i) => (
+          <div key={i} className="flex gap-4 items-start border-b border-gray-light pb-2">
+            <div className="serif text-gold font-bold w-8">{step}</div>
+            <div className="flex-1">
+              <div className="font-semibold text-navy">{name}</div>
+              <div className="text-xs text-gray-mid">{detail}</div>
+            </div>
+            <code className="text-xs text-gold bg-navy-dark text-gold px-2 py-1 whitespace-nowrap">{endpoint}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="grid md:grid-cols-2 gap-4">
+      <div className="bg-white border border-gold p-6">
+        <div className="text-xs tracking-widest text-gold mb-3">REQUIRED ENV VARS</div>
+        <ul className="text-xs text-navy space-y-1 font-mono">
+          <li>ANTHROPIC_API_KEY</li>
+          <li>TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER</li>
+          <li>SENDGRID_API_KEY / SENDGRID_FROM_EMAIL</li>
+          <li>VAPI_API_KEY (optional)</li>
+          <li>KV_REST_API_URL / KV_REST_API_TOKEN</li>
+          <li>ADMIN_PASSWORD</li>
+          <li>WEBHOOK_SECRET</li>
+        </ul>
+      </div>
+      <div className="bg-white border border-gold p-6">
+        <div className="text-xs tracking-widest text-gold mb-3">WEBHOOK CONFIGURATIONS</div>
+        <div className="text-xs text-navy space-y-2">
+          <div><strong>Twilio SMS:</strong> POST /api/inbound-sms</div>
+          <div><strong>Twilio Voice:</strong> POST /api/inbound-call</div>
+          <div><strong>SendGrid Inbound:</strong> POST /api/inbound-email</div>
+          <div><strong>Vercel Cron:</strong> Auto-configured via vercel.json</div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// =========================================================================
+// ADMIN: PROMPT LAB (live Claude scratchpad)
+// =========================================================================
+const AdminPromptLab = ({ showToast }) => {
+  const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState("claude-opus-4-5");
+  const [maxTokens, setMaxTokens] = useState(1024);
+  const [response, setResponse] = useState(null);
+  const [usage, setUsage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  const run = async () => {
+    if (!prompt.trim()) return;
+    setLoading(true);
+    setResponse(null);
+    try {
+      const result = await API.queryClaude(prompt, model, maxTokens);
+      setResponse(result.text);
+      setUsage(result.usage);
+      setHistory(h => [{ prompt, response: result.text, model, at: new Date().toISOString() }, ...h].slice(0, 10));
+    } catch (e) {
+      showToast('Query failed: ' + e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const presets = [
+    { label: "Audit prompt test", prompt: "Score the local SEO of a roofing company in Chicago, IL. Output JSON: {\"score\": <0-100>, \"findings\": \"<2 sentences>\", \"recommendation\": \"<1 sentence>\"}" },
+    { label: "Email rewrite", prompt: "Rewrite this email to be more direct and outcome-focused while keeping the warm tone:\n\n[paste email here]" },
+    { label: "Objection handler", prompt: "A prospect just said: \"$4,997 is too expensive, I need to think about it.\" Write a 3-sentence response that doesn't discount but reframes the math." },
+    { label: "Industry research", prompt: "What are the top 3 AI-driven changes affecting [INDUSTRY] in 2026 that local operators don't yet realize are hurting them?" }
+  ];
+
+  return (
+    <div className="p-10 max-w-5xl">
+      <div className="mb-8">
+        <div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div>
+        <h1 className="serif text-4xl text-navy font-semibold">Prompt Lab</h1>
+        <p className="text-gray-mid mt-2">Live Claude scratchpad — test prompts, draft content, run one-off queries</p>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white border border-gold p-6">
+          <div className="flex flex-wrap gap-2 mb-4">
+            {presets.map((p, i) => (
+              <button key={i} onClick={() => setPrompt(p.prompt)} className="btn-ghost px-3 py-1.5 text-xs">{p.label}</button>
+            ))}
+          </div>
+
+          <Textarea label="Prompt" value={prompt} onChange={setPrompt} rows={10} />
+
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <SelectField label="Model" value={model} onChange={setModel} options={[
+              "claude-opus-4-5",
+              "claude-sonnet-4-5",
+              "claude-haiku-4-5"
+            ]} />
+            <Field label="Max Tokens" value={maxTokens} onChange={v => setMaxTokens(parseInt(v) || 1024)} type="number" />
+          </div>
+
+          <button onClick={run} disabled={loading || !prompt.trim()} className="btn-primary w-full py-3 mt-6 tracking-wider serif">
+            {loading ? <span className="flex items-center justify-center gap-2"><span className="spinner"></span>QUERYING CLAUDE...</span> : "RUN QUERY →"}
+          </button>
+
+          {response && (
+            <div className="mt-6 border-t border-gold pt-6">
+              <div className="flex justify-between items-center mb-3">
+                <div className="text-xs tracking-widest text-gold">RESPONSE</div>
+                {usage && (
+                  <div className="text-xs text-gray-mid">
+                    {usage.input_tokens} in · {usage.output_tokens} out
+                  </div>
+                )}
+              </div>
+              <div className="bg-gold-soft border border-gold p-4 whitespace-pre-wrap text-sm text-navy leading-relaxed">{response}</div>
+              <button onClick={() => { navigator.clipboard.writeText(response); showToast("Copied"); }} className="btn-ghost px-4 py-2 text-xs tracking-wider mt-3">COPY RESPONSE</button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-gold p-6 max-h-[600px] overflow-y-auto">
+          <div className="text-xs tracking-widest text-gold mb-3">RECENT QUERIES</div>
+          {history.length === 0 ? (
+            <p className="text-sm text-gray-mid">Run a query to see history</p>
+          ) : (
+            <div className="space-y-3">
+              {history.map((h, i) => (
+                <button key={i} onClick={() => { setPrompt(h.prompt); setResponse(h.response); setModel(h.model); }}
+                  className="w-full text-left p-3 bg-gold-soft border border-gray-light hover:border-gold transition">
+                  <div className="text-xs text-gold mb-1">{h.model} · {fmtRelative(h.at)}</div>
+                  <div className="text-xs text-navy truncate">{h.prompt.slice(0, 80)}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: SETTINGS
+// =========================================================================
+const AdminSettings = ({ showToast }) => {
+  const [health, setHealth] = useState(null);
+  useEffect(() => { API.health().then(setHealth).catch(()=>{}); }, []);
+
+  return (
+    <div className="p-10 max-w-3xl">
+      <div className="mb-8"><div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div><h1 className="serif text-4xl text-navy font-semibold">Settings</h1></div>
+
+      {health && (
+        <div className="bg-white border border-gold p-6 mb-4">
+          <div className="text-xs tracking-widest text-gold mb-3">AGENCY DETAILS</div>
+          <div className="space-y-2 text-sm text-navy">
+            <div>Name: <strong>{health.agency.name}</strong></div>
+            <div>Email: <strong>{health.agency.email}</strong></div>
+          </div>
+          <p className="text-xs text-gray-mid mt-3">Update these via Vercel environment variables (AGENCY_NAME, AGENCY_EMAIL, etc.)</p>
+        </div>
+      )}
+
+      {health && (
+        <div className="bg-white border border-gold p-6 mb-4">
+          <div className="text-xs tracking-widest text-gold mb-3">INTEGRATION STATUS</div>
+          <div className="space-y-2">
+            {Object.entries(health.integrations).map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between text-sm">
+                <span className="text-navy uppercase tracking-wide">{k}</span>
+                <span className="flex items-center gap-2">
+                  <span className={"status-dot " + (v ? 'live' : 'failed')}></span>
+                  <span style={{ color: v ? 'var(--strong)' : 'var(--critical)' }}>{v ? 'CONNECTED' : 'NOT CONFIGURED'}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =========================================================================
+// ROOT APP
+// =========================================================================
+function App() {
+  const [route, navigate] = useRoute();
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedAudit, setSubmittedAudit] = useState(null);
+
+  const showToast = (msg, type = 'success') => setToast({ msg, type });
+
+  useEffect(() => {
+    const token = localStorage.getItem('admin:token');
+    if (token) {
+      API.health().then(() => setAdminAuth(true)).catch(() => {
+        localStorage.removeItem('admin:token');
+      });
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin:token');
+    setAdminAuth(false);
+    navigate('/');
+  };
+
+  const handleIntakeSubmit = async (form) => {
+    setSubmitting(true);
+    try {
+      const result = await API.submitIntake(form);
+      setSubmittedAudit({ intake: form, id: result.auditId });
+      navigate('/audit/confirmation');
+    } catch (e) {
+      showToast('Submission failed. Check API connection.', 'error');
+    } finally { setSubmitting(false); }
+  };
+
+  let view;
+  if (route === '/') view = <LandingPage navigate={navigate} />;
+  else if (route === '/audit') view = <AuditIntake navigate={navigate} onSubmit={handleIntakeSubmit} submitting={submitting} />;
+  else if (route === '/audit/confirmation' && submittedAudit) view = <AuditConfirmation navigate={navigate} intake={submittedAudit.intake} auditId={submittedAudit.id} />;
+  else if (route.startsWith('/admin')) {
+    if (!adminAuth) {
+      view = <AdminAuth onAuth={setAdminAuth} />;
+    } else {
+      let inner;
+      if (route === '/admin') inner = <AdminDashboard navigate={navigate} showToast={showToast} />;
+      else if (route === '/admin/audits') inner = <AdminAuditsList navigate={navigate} showToast={showToast} />;
+      else if (route.startsWith('/admin/audits/')) {
+        const id = route.replace('/admin/audits/', '');
+        inner = <AdminAuditDetail auditId={id} navigate={navigate} showToast={showToast} />;
+      }
+      else if (route === '/admin/pipeline') inner = <AdminPipeline navigate={navigate} showToast={showToast} />;
+      else if (route === '/admin/inbox') inner = <AdminInbox navigate={navigate} showToast={showToast} />;
+      else if (route === '/admin/automation') inner = <AdminAutomation />;
+      else if (route === '/admin/prompt-lab') inner = <AdminPromptLab showToast={showToast} />;
+      else if (route === '/admin/settings') inner = <AdminSettings showToast={showToast} />;
+      else inner = <div className="p-10"><h1 className="serif text-3xl">Page not found</h1></div>;
+      view = <AdminLayout navigate={navigate} currentRoute={route} onLogout={handleLogout}>{inner}</AdminLayout>;
+    }
+  }
+  else view = <div className="p-10"><h1 className="serif text-3xl">Page not found</h1><button onClick={() => navigate('/')} className="btn-primary mt-4 px-5 py-2.5">← Home</button></div>;
+
+  return (
+    <div className="slide-up">
+      {view}
+      {toast && <Toast message={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
