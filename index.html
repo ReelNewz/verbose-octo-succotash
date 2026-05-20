@@ -508,3 +508,567 @@ const AuditConfirmation = ({ navigate, intake, auditId }) => (
 // =========================================================================
 // ADMIN: AUTH GATE
 // =========================================================================
+const AdminAuth = ({ onAuth }) => {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(false);
+  const [trying, setTrying] = useState(false);
+
+  const handleSubmit = async () => {
+    setTrying(true);
+    setError(false);
+    localStorage.setItem('admin:token', password);
+    try {
+      await API.health();
+      onAuth(true);
+    } catch (e) {
+      localStorage.removeItem('admin:token');
+      setError(true);
+    } finally {
+      setTrying(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6 bg-navy-dark">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8"><Logo dark /></div>
+        <div className="bg-white border-2 border-gold p-10">
+          <div className="text-xs tracking-[0.3em] text-gold mb-3 text-center">AGENCY OPERATIONS</div>
+          <h1 className="serif text-3xl text-navy font-semibold mb-6 text-center">Admin Access</h1>
+          <Field label="Admin Password" type="password" value={password} onChange={setPassword} />
+          {error && <div className="text-sm text-red-600 mt-2">Incorrect password</div>}
+          <button disabled={trying} onClick={handleSubmit} className="btn-primary w-full py-3 mt-6 serif tracking-wider">
+            {trying ? "VERIFYING..." : "ENTER →"}
+          </button>
+          <div className="text-xs text-gray-mid mt-6 text-center">Set via ADMIN_PASSWORD env var</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: LAYOUT
+// =========================================================================
+const AdminLayout = ({ navigate, currentRoute, children, onLogout }) => {
+  const navItems = [
+    { path: '/admin', label: 'Dashboard', icon: '◧' },
+    { path: '/admin/audits', label: 'Audits', icon: '◰' },
+    { path: '/admin/pipeline', label: 'Pipeline', icon: '◱' },
+    { path: '/admin/inbox', label: 'Inbox', icon: '✉' },
+    { path: '/admin/automation', label: 'Automation', icon: '⚙' },
+    { path: '/admin/prompt-lab', label: 'Prompt Lab', icon: '🧪' },
+    { path: '/admin/settings', label: 'Settings', icon: '◴' }
+  ];
+  return (
+    <div className="min-h-screen flex">
+      <aside className="w-64 bg-navy text-white flex-shrink-0 flex flex-col">
+        <div className="p-6 border-b border-gold"><Logo dark /></div>
+        <nav className="py-6 flex-1">
+          {navItems.map(item => (
+            <button key={item.path} onClick={() => navigate(item.path)}
+              className={"w-full text-left px-6 py-3 flex items-center gap-3 transition-colors text-sm " +
+                (currentRoute === item.path || (item.path !== '/admin' && currentRoute.startsWith(item.path))
+                  ? "bg-navy-light text-gold border-l-4 border-gold pl-5"
+                  : "text-gray-300 hover:bg-navy-light hover:text-gold")}>
+              <span className="text-lg">{item.icon}</span><span className="serif">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="p-6 border-t border-gold">
+          <button onClick={() => navigate('/')} className="text-xs text-gray-mid hover:text-gold tracking-widest block mb-2">← VIEW PUBLIC SITE</button>
+          <button onClick={onLogout} className="text-xs text-gray-mid hover:text-gold tracking-widest">LOGOUT</button>
+        </div>
+      </aside>
+      <main className="flex-1 overflow-y-auto">{children}</main>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: DASHBOARD
+// =========================================================================
+const AdminDashboard = ({ navigate, showToast }) => {
+  const [audits, setAudits] = useState([]);
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [a, h] = await Promise.all([API.listAudits(), API.health()]);
+        setAudits(a.audits || []);
+        setHealth(h);
+      } catch (e) { showToast('Failed to load: ' + e.message, 'error'); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const stats = useMemo(() => {
+    const total = audits.length;
+    const last30 = audits.filter(a => new Date(a.createdAt) > new Date(Date.now() - 30 * 86400000)).length;
+    const byStage = {};
+    PIPELINE_STAGES.forEach(s => byStage[s.id] = 0);
+    audits.forEach(a => { byStage[a.pipelineStage || 'requested'] = (byStage[a.pipelineStage || 'requested'] || 0) + 1; });
+    const clients = byStage['client'] || 0;
+    const conversionRate = total > 0 ? Math.round((clients / total) * 100) : 0;
+    const mrr = clients * 1497;
+    const avgScore = total > 0 ? Math.round(audits.filter(a => a.scores).reduce((s, a) => s + calculateReadiness(a.scores), 0) / Math.max(1, audits.filter(a => a.scores).length)) : 0;
+    return { total, last30, byStage, clients, conversionRate, mrr, avgScore };
+  }, [audits]);
+
+  if (loading) return <div className="p-10"><Spinner /></div>;
+
+  return (
+    <div className="p-10">
+      <div className="mb-8">
+        <div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div>
+        <h1 className="serif text-4xl text-navy font-semibold">Dashboard</h1>
+      </div>
+
+      {health && (
+        <div className="bg-white border border-gold p-4 mb-6 flex flex-wrap gap-4 text-xs">
+          <div className="text-xs tracking-widest text-gold font-semibold">STACK STATUS:</div>
+          {Object.entries(health.integrations).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-1">
+              <span className={"status-dot " + (v ? 'live' : 'failed')}></span>
+              <span className="text-navy uppercase tracking-wide">{k}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        {[
+          { label: "Total Audits", value: stats.total, sub: stats.last30 + " in last 30 days" },
+          { label: "Active Clients", value: stats.clients, sub: "$1,497 avg retainer" },
+          { label: "Est. MRR", value: fmt(stats.mrr), sub: "from active retainers" },
+          { label: "Conversion Rate", value: stats.conversionRate + "%", sub: "audit → client" }
+        ].map((s, i) => (
+          <div key={i} className="bg-white border border-gold p-6">
+            <div className="text-xs tracking-widest text-gold mb-2">{s.label}</div>
+            <div className="serif text-4xl font-bold text-navy mb-1">{s.value}</div>
+            <div className="text-xs text-gray-mid">{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6 mb-10">
+        <div className="bg-white border border-gold p-6">
+          <div className="text-xs tracking-widest text-gold mb-4">PIPELINE DISTRIBUTION</div>
+          <div className="space-y-3">
+            {PIPELINE_STAGES.map(stage => {
+              const count = stats.byStage[stage.id] || 0;
+              const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+              return (
+                <div key={stage.id}>
+                  <div className="flex justify-between text-sm mb-1"><span className="text-navy">{stage.name}</span><span className="font-bold text-navy">{count}</span></div>
+                  <div className="h-2 bg-gray-100"><div className="h-full" style={{ width: pct + "%", background: stage.color }}></div></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="bg-white border border-gold p-6">
+          <div className="text-xs tracking-widest text-gold mb-4">RECENT AUDITS</div>
+          <div className="space-y-2">
+            {audits.slice(0, 5).map(a => {
+              const r = a.scores ? calculateReadiness(a.scores) : null;
+              const stage = PIPELINE_STAGES.find(s => s.id === (a.pipelineStage || 'requested'));
+              return (
+                <button key={a.id} onClick={() => navigate('/admin/audits/' + a.id)} className="w-full flex items-center gap-3 p-2 hover:bg-gold-soft text-left">
+                  <div className="serif text-xl font-bold text-navy w-10">{r || '–'}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="serif text-sm text-navy font-semibold truncate">{a.intake.businessName}</div>
+                    <div className="text-xs text-gray-mid">{fmtRelative(a.createdAt)}</div>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 text-white font-bold whitespace-nowrap" style={{ background: stage.color }}>{stage.name}</span>
+                </button>
+              );
+            })}
+            {audits.length === 0 && <p className="text-sm text-gray-mid">No audits yet. Submit a test from /audit.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: AUDITS LIST
+// =========================================================================
+const AdminAuditsList = ({ navigate, showToast }) => {
+  const [audits, setAudits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
+
+  useEffect(() => {
+    (async () => {
+      try { const a = await API.listAudits(); setAudits(a.audits || []); }
+      catch (e) { showToast('Failed to load', 'error'); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const filtered = audits.filter(a => {
+    if (stageFilter !== "all" && (a.pipelineStage || 'requested') !== stageFilter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return a.intake.businessName.toLowerCase().includes(s) || a.intake.ownerName.toLowerCase().includes(s) || (a.intake.city||'').toLowerCase().includes(s);
+    }
+    return true;
+  });
+
+  if (loading) return <div className="p-10"><Spinner /></div>;
+
+  return (
+    <div className="p-10">
+      <div className="mb-8"><div className="text-xs tracking-[0.3em] text-gold mb-2">AGENCY OPERATIONS</div><h1 className="serif text-4xl text-navy font-semibold">All Audits ({audits.length})</h1></div>
+
+      <div className="flex gap-4 mb-6">
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="flex-1 px-4 py-3 text-sm" />
+        <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className="px-4 py-3 text-sm bg-white">
+          <option value="all">All Stages</option>
+          {PIPELINE_STAGES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white border border-gold p-12 text-center text-gray-mid">No audits match your filters</div>
+      ) : (
+        <div className="bg-white border border-gold">
+          {filtered.map(a => {
+            const r = a.scores ? calculateReadiness(a.scores) : null;
+            const stage = PIPELINE_STAGES.find(s => s.id === (a.pipelineStage || 'requested'));
+            const auto = a.automationStatus || {};
+            return (
+              <button key={a.id} onClick={() => navigate('/admin/audits/' + a.id)} className="w-full flex items-center gap-4 px-6 py-4 hover:bg-gold-soft transition text-left border-b border-gray-light">
+                <div className="serif text-2xl font-bold w-12" style={{ color: r ? getStatus(r).color : 'var(--gray-mid)' }}>{r || '–'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="serif text-base text-navy font-semibold truncate">{a.intake.businessName}</div>
+                  <div className="text-xs text-gray-mid truncate">{a.intake.industry} · {a.intake.ownerName} · {a.intake.email}</div>
+                </div>
+                <div className="hidden md:flex gap-1 text-xs">
+                  <span title="Confirmation SMS"  className={auto.confirmationSmsSent ? "text-strong" : "text-gray-300"}>📱</span>
+                  <span title="Confirmation Email" className={auto.confirmationEmailSent ? "text-strong" : "text-gray-300"}>✉</span>
+                  <span title="Audit Generated"   className={auto.auditGenerated ? "text-strong" : "text-gray-300"}>⚙</span>
+                  <span title="Audit Delivered"   className={auto.auditEmailSent ? "text-strong" : "text-gray-300"}>📨</span>
+                  <span title="Proposal Sent"     className={auto.proposalSent ? "text-strong" : "text-gray-300"}>📋</span>
+                </div>
+                <span className="text-xs px-2 py-1 text-white font-bold whitespace-nowrap" style={{ background: stage.color }}>{stage.name}</span>
+                <div className="text-xs text-gray-mid w-20 text-right">{fmtRelative(a.createdAt)}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =========================================================================
+// ADMIN: AUDIT DETAIL
+// =========================================================================
+const ScoreRing = ({ score, size = 200 }) => {
+  const status = getStatus(score);
+  const radius = (size - 24) / 2;
+  const c = 2 * Math.PI * radius;
+  const offset = c - (score / 100) * c;
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="score-ring">
+        <circle cx={size/2} cy={size/2} r={radius} stroke="#E8E2D0" strokeWidth="8" fill="none" />
+        <circle cx={size/2} cy={size/2} r={radius} stroke={status.color} strokeWidth="8" fill="none" strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: "stroke-dashoffset 1.5s ease-out" }} />
+      </svg>
+      <div className="absolute text-center"><div className="serif text-5xl font-bold text-navy">{score}</div><div className="text-xs tracking-widest text-gray-mid">/ 100</div></div>
+    </div>
+  );
+};
+
+const AdminAuditDetail = ({ auditId, navigate, showToast }) => {
+  const [audit, setAudit] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("report");
+  const [notes, setNotes] = useState("");
+  const [showDelete, setShowDelete] = useState(false);
+  const [showCustomMsg, setShowCustomMsg] = useState(null);
+  const [customSubject, setCustomSubject] = useState("");
+  const [customBody, setCustomBody] = useState("");
+
+  const load = async () => {
+    try {
+      const [a, act] = await Promise.all([API.getAudit(auditId), API.getActivity(auditId)]);
+      setAudit(a.audit);
+      setActivity(act.activity || []);
+      setNotes(a.audit.notes || "");
+    } catch (e) { showToast('Failed to load audit', 'error'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [auditId]);
+
+  if (loading) return <div className="p-10"><Spinner /></div>;
+  if (!audit) return <div className="p-10"><h1 className="serif text-3xl">Audit not found</h1></div>;
+
+  const r = audit.scores ? calculateReadiness(audit.scores) : null;
+  const tier = r ? getTier(r) : null;
+  const impact = r ? estimateImpact(audit.intake, r) : null;
+  const currentStage = PIPELINE_STAGES.find(s => s.id === (audit.pipelineStage || 'requested'));
+  const auto = audit.automationStatus || {};
+
+  const updateStage = async (stageId) => {
+    try { await API.updateStage(auditId, stageId); showToast("Stage updated"); load(); }
+    catch (e) { showToast('Update failed', 'error'); }
+  };
+
+  const saveNotes = async () => {
+    try { await API.updateNotes(auditId, notes); showToast("Notes saved"); }
+    catch (e) { showToast('Save failed', 'error'); }
+  };
+
+  const sendProposalAction = async () => {
+    if (!confirm("Send the GROWTH-tier proposal email + SMS to " + audit.intake.email + "?")) return;
+    try { await API.sendProposal(auditId); showToast("Proposal sent"); load(); }
+    catch (e) { showToast('Send failed: ' + e.message, 'error'); }
+  };
+
+  const sendAuditNow = async () => {
+    if (!audit.scores) { showToast('Audit not yet generated', 'error'); return; }
+    if (!confirm("Re-send the audit delivery email to " + audit.intake.email + "?")) return;
+    try {
+      await API.sendEmail({ auditId, to: audit.intake.email, type: 'audit_delivery' });
+      showToast("Audit email sent");
+      load();
+    } catch (e) { showToast('Send failed', 'error'); }
+  };
+
+  const sendCustomEmail = async () => {
+    if (!customSubject || !customBody) return;
+    try {
+      await API.sendEmail({
+        auditId, to: audit.intake.email, type: 'custom',
+        customSubject, customBody: '<p>' + customBody.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>') + '</p>'
+      });
+      showToast("Email sent");
+      setShowCustomMsg(null);
+      setCustomSubject(""); setCustomBody("");
+      load();
+    } catch (e) { showToast('Send failed', 'error'); }
+  };
+
+  const sendCustomSms = async () => {
+    if (!audit.intake.phone) { showToast('No phone on file', 'error'); return; }
+    if (!customBody) return;
+    try {
+      await API.sendSms({ auditId, to: audit.intake.phone, type: 'custom', customMessage: customBody });
+      showToast("SMS sent");
+      setShowCustomMsg(null);
+      setCustomBody("");
+      load();
+    } catch (e) { showToast('Send failed', 'error'); }
+  };
+
+  const deleteAudit = async () => {
+    try { await API.deleteAudit(auditId); showToast('Deleted'); navigate('/admin/audits'); }
+    catch (e) { showToast('Delete failed', 'error'); }
+  };
+
+  const sortedDims = audit.scores ? [...DIMENSIONS].sort((a, b) => audit.scores[a.id] - audit.scores[b.id]) : [];
+
+  return (
+    <div className="p-10">
+      <button onClick={() => navigate('/admin/audits')} className="text-sm text-gray-mid hover:text-navy mb-4">← All Audits</button>
+
+      <div className="bg-navy text-white p-8 mb-6 border-4 border-gold">
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="text-xs tracking-[0.3em] text-gold mb-2">{audit.id}</div>
+            <h1 className="serif text-4xl font-semibold mb-2">{audit.intake.businessName}</h1>
+            <div className="text-gold serif text-lg">{audit.intake.industry} · {audit.intake.city}{audit.intake.state ? ", " + audit.intake.state : ""}</div>
+            <div className="text-xs text-gray-300 mt-2">{audit.intake.ownerName} · {audit.intake.email}{audit.intake.phone ? " · " + audit.intake.phone : ""}</div>
+            <div className="text-xs text-gray-mid mt-1">Created {fmtDateTime(audit.createdAt)}</div>
+          </div>
+          {r && (<div className="text-right"><div className="serif text-6xl font-bold text-gold">{r}</div><div className="text-xs tracking-widest text-gold">/ 100 · {tier}</div></div>)}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gold p-4 mb-4 flex flex-wrap gap-3 text-xs">
+        <div className="text-xs tracking-widest text-gold font-semibold mr-2">AUTOMATION:</div>
+        {[
+          ['confirmationSmsSent', '📱 SMS Confirm'],
+          ['confirmationEmailSent', '✉ Email Confirm'],
+          ['auditGenerated', '⚙ AI Audit'],
+          ['auditEmailSent', '📨 Audit Delivered'],
+          ['proposalSent', '📋 Proposal']
+        ].map(([key, label]) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <span className={"status-dot " + (auto[key] ? 'live' : 'pending')}></span>
+            <span className="text-navy">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white border border-gold p-4 mb-4">
+        <div className="text-xs tracking-widest text-gold mb-2">PIPELINE STAGE</div>
+        <div className="flex flex-wrap gap-2">
+          {PIPELINE_STAGES.map(s => (
+            <button key={s.id} onClick={() => updateStage(s.id)}
+              className={"px-4 py-2 text-xs font-bold tracking-wide transition " + (currentStage.id === s.id ? "text-white" : "text-navy bg-gray-100 hover:bg-gold-soft")}
+              style={currentStage.id === s.id ? { background: s.color } : {}}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button onClick={sendAuditNow} disabled={!audit.scores} className="btn-primary px-4 py-2 text-sm tracking-wider">✉ Resend Audit</button>
+        <button onClick={sendProposalAction} disabled={!audit.scores} className="btn-gold px-4 py-2 text-sm tracking-wider">📋 Send Proposal</button>
+        <button onClick={() => setShowCustomMsg('email')} className="btn-ghost px-4 py-2 text-sm tracking-wider">✉ Custom Email</button>
+        {audit.intake.phone && <button onClick={() => setShowCustomMsg('sms')} className="btn-ghost px-4 py-2 text-sm tracking-wider">💬 Custom SMS</button>}
+        <button onClick={() => window.print()} className="btn-ghost px-4 py-2 text-sm tracking-wider">⎙ Print</button>
+        <button onClick={() => setShowDelete(true)} className="btn-danger px-4 py-2 text-sm tracking-wider ml-auto">Delete</button>
+      </div>
+
+      <div className="border-b border-gold flex gap-1 mb-6">
+        {[
+          { id: "report", label: "Audit Report" },
+          { id: "intake", label: "Intake Data" },
+          { id: "activity", label: "Activity (" + activity.length + ")" },
+          { id: "notes", label: "Notes" }
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} className={"px-5 py-3 text-sm tracking-wider serif transition " + (activeTab === t.id ? "bg-navy text-gold border-t border-l border-r border-gold" : "text-gray-mid hover:text-navy")}>{t.label}</button>
+        ))}
+      </div>
+
+      {activeTab === "report" && (
+        audit.scores ? (
+          <div className="space-y-6">
+            <div className="bg-white border border-gold p-8 grid md:grid-cols-2 gap-8 items-center">
+              <div>
+                <div className="text-xs tracking-[0.3em] text-gold mb-2">OVERALL READINESS</div>
+                <h2 className="serif text-3xl text-navy font-semibold mb-3">Tier: {tier}</h2>
+                <p className="text-gray-mid leading-relaxed">{audit.executiveSummary || 'Executive summary not generated yet.'}</p>
+              </div>
+              <div className="flex justify-center"><ScoreRing score={r} size={220} /></div>
+            </div>
+
+            <div className="bg-gold-soft border border-gold p-6">
+              <div className="text-xs tracking-widest text-gold mb-3">12-MONTH UPLIFT POTENTIAL</div>
+              <div className="serif text-4xl font-bold text-navy">{fmt(impact.annualUpliftLow)}–{fmt(impact.annualUpliftHigh)}</div>
+              <div className="text-sm text-gray-mid mt-2">Based on {audit.intake.monthlyLeads || 40} monthly leads × {fmt(parseInt(audit.intake.leadValue) || 800)} lead value, applied to identified gaps</div>
+            </div>
+
+            <div>
+              <div className="text-xs tracking-widest text-gold mb-3">10-DIMENSION SCORECARD</div>
+              <div className="grid md:grid-cols-2 gap-3">
+                {sortedDims.map(d => {
+                  const sc = audit.scores[d.id];
+                  const st = getStatus(sc);
+                  const content = audit.aiContent?.[d.id];
+                  return (
+                    <div key={d.id} className="bg-white border border-gray-light p-5">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2"><span className="text-xl">{d.icon}</span><span className="serif text-navy font-semibold">{d.name}</span></div>
+                        <div className="text-right">
+                          <div className="serif text-2xl font-bold" style={{ color: st.color }}>{sc}</div>
+                          <div className="text-xs tracking-widest" style={{ color: st.color }}>{st.label}</div>
+                        </div>
+                      </div>
+                      <div className="h-1 bg-gray-100 mb-3"><div className="h-full" style={{ width: sc + '%', background: st.color }}></div></div>
+                      {content && (
+                        <>
+                          <p className="text-xs text-navy leading-relaxed mb-2">{content.findings}</p>
+                          <p className="text-xs text-gold italic">→ {content.recommendation}</p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-gold p-12 text-center">
+            <Spinner label="Audit is being generated by Claude AI... (~60 seconds)" />
+            <p className="text-xs text-gray-mid mt-4">Refresh the page to check status</p>
+          </div>
+        )
+      )}
+
+      {activeTab === "intake" && (
+        <div className="bg-white border border-gold p-8">
+          <div className="grid md:grid-cols-2 gap-6">
+            {Object.entries(audit.intake).map(([key, val]) => (
+              <div key={key}>
+                <div className="text-xs tracking-widest text-gold mb-1">{key.replace(/([A-Z])/g, ' $1').toUpperCase()}</div>
+                <div className="text-navy">{val || <span className="text-gray-mid italic">not provided</span>}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "activity" && (
+        <div className="bg-white border border-gold">
+          {activity.length === 0 ? (
+            <div className="p-8 text-center text-gray-mid">No activity yet</div>
+          ) : (
+            <div className="divide-y divide-gray-light">
+              {activity.map(evt => {
+                const t = ACTIVITY_TYPES[evt.type] || { icon: '·', color: 'var(--gray-mid)', label: evt.type };
+                return (
+                  <div key={evt.id} className="px-6 py-4 flex items-start gap-4">
+                    <div className="text-xl" style={{ color: t.color }}>{t.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-navy text-sm">{t.label}</div>
+                      {evt.details && Object.keys(evt.details).length > 0 && (
+                        <div className="text-xs text-gray-mid mt-1 break-all">
+                          {Object.entries(evt.details).map(([k, v]) => <span key={k} className="mr-3"><span className="text-gold">{k}:</span> {String(v).slice(0, 120)}</span>)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-mid whitespace-nowrap">{fmtRelative(evt.timestamp)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "notes" && (
+        <div className="bg-white border border-gold p-8">
+          <Textarea label="Internal Operator Notes" value={notes} onChange={setNotes} rows={12} />
+          <button onClick={saveNotes} className="btn-primary px-5 py-2.5 text-sm tracking-wider mt-4">SAVE NOTES</button>
+        </div>
+      )}
+
+      {showCustomMsg && (
+        <Modal title={showCustomMsg === 'email' ? "Custom Email" : "Custom SMS"} onClose={() => setShowCustomMsg(null)}>
+          {showCustomMsg === 'email' && (
+            <Field label="Subject" value={customSubject} onChange={setCustomSubject} />
+          )}
+          <Textarea label={showCustomMsg === 'email' ? "Body" : "Message (max ~320 chars)"} value={customBody} onChange={setCustomBody} rows={showCustomMsg === 'email' ? 8 : 4} />
+          {showCustomMsg === 'sms' && <p className="text-xs text-gray-mid mt-2">{customBody.length} / 320 characters</p>}
+          <div className="flex gap-3 mt-6">
+            <button onClick={() => setShowCustomMsg(null)} className="btn-ghost px-5 py-2.5 text-sm tracking-wider">CANCEL</button>
+            <button onClick={showCustomMsg === 'email' ? sendCustomEmail : sendCustomSms} disabled={!customBody} className="btn-primary px-5 py-2.5 text-sm tracking-wider">SEND</button>
+          </div>
+        </Modal>
+      )}
+
+      {showDelete && (
+        <Modal title="Delete Audit?" onClose={() => setShowDelete(false)}>
+          <p className="text-navy mb-6">Permanently delete <strong>{audit.intake.businessName}</strong>? This cannot be undone.</p>
+          <div className="flex gap-3">
+            <button onClick={() => setShowDelete(false)} className="btn-ghost px-5 py-2.5 text-sm tracking-wider">CANCEL</button>
+            <button onClick={deleteAudit} className="btn-danger px-5 py-2.5 text-sm tracking-wider">DELETE</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
