@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Business Audit System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.6/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0B1F3A; --navy-light: #15315A; --navy-dark: #050F1F;
+    --gold: #C9A961; --gold-bright: #E5C77A; --gold-soft: #F5EFE0;
+    --gray-bg: #F8F6F1; --gray-mid: #8A8A8A; --gray-light: #E8E2D0;
+    --critical: #C0392B; --high: #E67E22; --moderate: #F39C12;
+    --strong: #16A085; --dominant: #2E86AB;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--gray-bg); color: var(--navy); -webkit-font-smoothing: antialiased; margin: 0; }
+  .serif { font-family: 'Cormorant Garamond', serif; }
+  .gold-line { background: linear-gradient(90deg, transparent 0%, var(--gold) 50%, transparent 100%); height: 1px; }
+  .bg-navy { background: var(--navy); } .bg-navy-dark { background: var(--navy-dark); }
+  .bg-gold { background: var(--gold); } .bg-gold-soft { background: var(--gold-soft); }
+  .text-navy { color: var(--navy); } .text-gold { color: var(--gold); } .text-gray-mid { color: var(--gray-mid); }
+  .border-gold { border-color: var(--gold); }
+  input, select, textarea {
+    font-family: 'Inter', sans-serif; border: 1px solid #D4CFC0;
+    background: white; color: var(--navy); transition: all 0.2s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(201, 169, 97, 0.15);
+  }
+  .btn-primary { background: var(--navy); color: white; border: 1px solid var(--gold); transition: all 0.2s; cursor: pointer; font-family: inherit; }
+  .btn-primary:hover:not(:disabled) { background: var(--navy-light); box-shadow: 0 4px 16px rgba(11, 31, 58, 0.25); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-gold { background: var(--gold); color: var(--navy); border: 1px solid var(--gold); transition: all 0.2s; cursor: pointer; font-weight: 600; font-family: inherit; }
+  .btn-gold:hover:not(:disabled) { background: var(--gold-bright); transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--navy); border: 1px solid var(--gray-light); transition: all 0.2s; cursor: pointer; font-family: inherit; }
+  .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-danger { background: white; color: var(--critical); border: 1px solid var(--critical); transition: all 0.2s; cursor: pointer; font-family: inherit; }
+  .btn-danger:hover { background: var(--critical); color: white; }
+  .score-ring { transform: rotate(-90deg); }
+  @keyframes pulse-gold { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .pulse-gold { animation: pulse-gold 2s ease-in-out infinite; }
+  @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .slide-up { animation: slide-up 0.5s ease-out; }
+  .card-hover { transition: all 0.25s; }
+  .card-hover:hover { border-color: var(--gold); box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08); transform: translateY(-2px); }
+  .stage-col { background: var(--gray-bg); min-height: 400px; border: 1px solid var(--gray-light); }
+  .stage-card { background: white; border: 1px solid var(--gray-light); cursor: grab; transition: all 0.2s; }
+  .stage-card:hover { border-color: var(--gold); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(11, 31, 58, 0.65); backdrop-filter: blur(4px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .modal-content { background: white; max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto; }
+  .toast { position: fixed; top: 24px; right: 24px; background: var(--navy); color: white; padding: 16px 24px; border-left: 4px solid var(--gold); box-shadow: 0 12px 32px rgba(0,0,0,0.2); z-index: 100; animation: slide-up 0.3s ease-out; }
+  .toast.error { border-left-color: var(--critical); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--gold-soft); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.live { background: var(--strong); }
+  .status-dot.pending { background: var(--moderate); }
+  .status-dot.failed { background: var(--critical); }
+  @media print { .no-print { display: none !important; } body { background: white !important; } }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--gray-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--gold); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+// =========================================================================
+// API CLIENT — connects frontend to serverless backend
+// =========================================================================
+const API = {
+  baseUrl: window.location.origin,
+  adminToken: () => localStorage.getItem('admin:token') || '',
+
+  async submitIntake(intake) {
+    const res = await fetch(this.baseUrl + '/api/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...intake, source: 'website' })
+    });
+    if (!res.ok) throw new Error('Intake failed');
+    return res.json();
+  },
+
+  async adminCall(action, params = {}, method = 'GET', body = null) {
+    const token = this.adminToken();
+    const query = new URLSearchParams({ action, ...params }).toString();
+    const opts = {
+      method,
+      headers: { 'Authorization': 'Bearer ' + token }
+    };
+    if (body && method === 'POST') {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(this.baseUrl + '/api/admin-data?' + query, opts);
+    if (res.status === 401) { localStorage.removeItem('admin:token'); window.location.reload(); throw new Error('Unauthorized'); }
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  },
+
+  listAudits()         { return this.adminCall('list-audits'); },
+  getAudit(id)         { return this.adminCall('get-audit', { id }); },
+  getMessages(limit=100){ return this.adminCall('messages', { limit }); },
+  getActivity(id)      { return this.adminCall('activity', { id }); },
+  health()             { return this.adminCall('health'); },
+
+  updateStage(auditId, stage)    { return this.adminCall('update-stage', {}, 'POST', { auditId, stage }); },
+  updateNotes(auditId, notes)    { return this.adminCall('update-notes', {}, 'POST', { auditId, notes }); },
+  sendEmail(p)                    { return this.adminCall('send-manual-email', {}, 'POST', p); },
+  sendSms(p)                      { return this.adminCall('send-manual-sms', {}, 'POST', p); },
+  sendProposal(auditId)           { return this.adminCall('send-proposal', {}, 'POST', { auditId }); },
+  deleteAudit(auditId)            { return this.adminCall('delete-audit', {}, 'POST', { auditId }); },
+
+  async queryClaude(prompt, model = 'claude-opus-4-5', maxTokens = 1024) {
+    const res = await fetch(this.baseUrl + '/api/query-claude', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + this.adminToken()
+      },
+      body: JSON.stringify({ prompt, model, max_tokens: maxTokens })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(err.error || ('HTTP ' + res.status));
+    }
+    return res.json();
+  }
+};
+
+// =========================================================================
+// DOMAIN CONSTANTS
+// =========================================================================
+const DIMENSIONS = [
+  { id: "website", name: "Website Performance", weight: 1.5, icon: "🖥" },
+  { id: "localseo", name: "Local SEO", weight: 1.0, icon: "📍" },
+  { id: "aeogeo", name: "AEO / GEO (AI Search)", weight: 1.5, icon: "🤖" },
+  { id: "reputation", name: "Online Reputation", weight: 1.0, icon: "⭐" },
+  { id: "competitor", name: "Competitor Gap", weight: 1.0, icon: "⚔️" },
+  { id: "leadcapture", name: "Lead Capture", weight: 1.0, icon: "🎯" },
+  { id: "automation", name: "Automation", weight: 1.5, icon: "⚙️" },
+  { id: "crm", name: "CRM & Follow-Up", weight: 1.0, icon: "📊" },
+  { id: "content", name: "Content & Authority", weight: 1.0, icon: "📝" },
+  { id: "aicx", name: "AI Customer Experience", weight: 1.0, icon: "💬" }
+];
+
+const STATUS_MAP = [
+  { max: 40, label: "CRITICAL", color: "var(--critical)", text: "Active revenue loss. Immediate intervention required." },
+  { max: 60, label: "HIGH RISK", color: "var(--high)", text: "Underperforming vs. local competitors." },
+  { max: 80, label: "MODERATE", color: "var(--moderate)", text: "Functional but suboptimal." },
+  { max: 95, label: "STRONG", color: "var(--strong)", text: "Competitive. Maintain and refine." },
+  { max: 100, label: "DOMINANT", color: "var(--dominant)", text: "Best-in-class. Protect this position." }
+];
+
+const PIPELINE_STAGES = [
+  { id: "requested", name: "Requested", color: "#8A8A8A" },
+  { id: "delivered", name: "Delivered", color: "#C9A961" },
+  { id: "call_booked", name: "Call Booked", color: "#3498DB" },
+  { id: "proposal_sent", name: "Proposal Sent", color: "#E67E22" },
+  { id: "client", name: "Active Client", color: "#16A085" },
+  { id: "lost", name: "Lost / Dormant", color: "#C0392B" }
+];
+
+const ACTIVITY_TYPES = {
+  intake_submitted: { icon: "▸", color: "var(--gray-mid)", label: "Intake submitted" },
+  sms_sent: { icon: "💬", color: "var(--strong)", label: "SMS sent" },
+  sms_failed: { icon: "✕", color: "var(--critical)", label: "SMS failed" },
+  email_sent: { icon: "✉", color: "var(--strong)", label: "Email sent" },
+  email_failed: { icon: "✕", color: "var(--critical)", label: "Email failed" },
+  email_received: { icon: "⬇", color: "var(--gold)", label: "Email received" },
+  sms_received: { icon: "⬇", color: "var(--gold)", label: "SMS received" },
+  email_auto_replied: { icon: "🤖", color: "var(--dominant)", label: "AI auto-replied" },
+  sms_auto_replied: { icon: "🤖", color: "var(--dominant)", label: "AI auto-replied" },
+  call_received: { icon: "📞", color: "var(--gold)", label: "Call received" },
+  audit_generation_started: { icon: "⚙", color: "var(--moderate)", label: "Generation started" },
+  audit_generated: { icon: "✓", color: "var(--strong)", label: "Audit generated" },
+  audit_generation_failed: { icon: "✕", color: "var(--critical)", label: "Generation failed" },
+  sms_opted_out: { icon: "⊘", color: "var(--gray-mid)", label: "Opted out (SMS)" }
+};
+
+const getStatus = (score) => STATUS_MAP.find(s => score <= s.max);
+
+const calculateReadiness = (scores) => {
+  let tw = 0, wt = 0;
+  DIMENSIONS.forEach(d => { tw += scores[d.id] * d.weight; wt += d.weight; });
+  return Math.round(tw / wt);
+};
+
+const getTier = (s) => s <= 40 ? "Foundational" : s <= 60 ? "Developing" : s <= 75 ? "Growing" : s <= 90 ? "Optimized" : "Dominant";
+
+const estimateImpact = (intake, readiness) => {
+  const leadValue = parseInt(intake.leadValue) || 800;
+  const monthlyLeads = parseInt(intake.monthlyLeads) || 40;
+  const gap = (100 - readiness) / 100;
+  const lostLow = Math.round(monthlyLeads * gap * 0.4);
+  const lostHigh = Math.round(lostLow * 1.4);
+  const recoveryLow = Math.round(lostLow * leadValue * 0.6);
+  const recoveryHigh = Math.round(recoveryLow * 1.4);
+  return {
+    leadsLostLow: lostLow, leadsLostHigh: lostHigh,
+    monthlyRecoveryLow: recoveryLow, monthlyRecoveryHigh: recoveryHigh,
+    annualUpliftLow: recoveryLow * 12, annualUpliftHigh: recoveryHigh * 12
+  };
+};
+
+const fmt = (n) => "$" + n.toLocaleString();
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDateTime = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const fmtRelative = (iso) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff/86400000) + 'd ago';
+  return fmtDate(iso);
+};
+
+// =========================================================================
+// ROUTER
+// =========================================================================
+const useRoute = () => {
+  const [route, setRoute] = useState(window.location.hash.slice(1) || '/');
+  useEffect(() => {
+    const h = () => setRoute(window.location.hash.slice(1) || '/');
+    window.addEventListener('hashchange', h);
+    return () => window.removeEventListener('hashchange', h);
+  }, []);
+  return [route, (path) => { window.location.hash = path; }];
+};
+
+// =========================================================================
+// SHARED UI
+// =========================================================================
+const Logo = ({ dark = false }) => (
+  <div className="flex items-center gap-3">
+    <div className={"w-10 h-10 border-2 flex items-center justify-center " + (dark ? "bg-white border-gold" : "bg-navy border-gold")}>
+      <span className={"serif text-xl font-semibold " + (dark ? "text-navy" : "text-gold")}>A</span>
+    </div>
+    <div>
+      <div className={"serif text-lg leading-tight font-semibold " + (dark ? "text-white" : "text-navy")}>AI BUSINESS AUDIT</div>
+      <div className="text-xs text-gray-mid tracking-widest">STRATEGIC GROWTH SYSTEM</div>
+    </div>
+  </div>
+);
+
+const Field = ({ label, value, onChange, type = "text", placeholder = "", required = false }) => (
+  <div>
+    <label className="block text-xs text-navy font-semibold mb-1 tracking-wide">{label}{required && <span className="text-gold ml-1">*</span>}</label>
+    <input type={type} value={value || ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="w-full px-3 py-2.5 text-sm" />
+  </div>
+);
+
+const SelectField = ({ label, value, onChange, options }) => (
+  <div>
+    <label className="block text-xs text-navy font-semibold mb-1 tracking-wide">{label}</label>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white">
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  </div>
+);
+
+const Textarea = ({ label, value, onChange, rows = 4 }) => (
+  <div>
+    <label className="block text-xs text-navy font-semibold mb-1 tracking-wide">{label}</label>
+    <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={rows} className="w-full px-3 py-2.5 text-sm" />
+  </div>
+);
+
+const GoldDivider = ({ className = "" }) => <div className={"gold-line " + className} />;
+
+const Toast = ({ message, type = 'success', onDone }) => {
+  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, []);
+  return <div className={"toast " + (type === 'error' ? 'error' : '')}><span className="text-gold mr-2">●</span>{message}</div>;
+};
+
+const Modal = ({ children, onClose, title }) => (
+  <div className="modal-bg no-print" onClick={onClose}>
+    <div className="modal-content border-2 border-gold" onClick={(e) => e.stopPropagation()}>
+      <div className="p-6 border-b border-gold flex justify-between items-center bg-navy text-white">
+        <div className="serif text-xl font-semibold">{title}</div>
+        <button onClick={onClose} className="text-gold text-2xl leading-none hover:opacity-70">×</button>
+      </div>
+      <div className="p-8">{children}</div>
+    </div>
+  </div>
+);
+
+const Spinner = ({ label = 'Loading...' }) => (
+  <div className="flex items-center gap-3 text-gray-mid"><span className="spinner"></span><span className="text-sm">{label}</span></div>
+);
+
+// =========================================================================
+// PUBLIC: LANDING
+// =========================================================================
+const LandingPage = ({ navigate }) => (
+  <div>
+    <header className="bg-white border-b border-gold py-4 px-6 sticky top-0 z-40">
+      <div className="max-w-7xl mx-auto flex justify-between items-center">
+        <Logo />
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate('/audit')} className="btn-gold px-5 py-2.5 text-sm tracking-wider">GET FREE AUDIT</button>
+          <button onClick={() => navigate('/admin')} className="text-xs text-gray-mid hover:text-navy tracking-wider">ADMIN</button>
+        </div>
+      </div>
+    </header>
+
+    <section className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, var(--navy) 0%, #1A3A66 100%)" }}>
+      <div className="absolute top-0 right-0 w-96 h-96 border-[40px] border-gold rounded-full opacity-10 -mr-40 -mt-40"></div>
+      <div className="max-w-7xl mx-auto px-6 py-24 relative">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="text-white">
+            <div className="inline-block px-4 py-1 border border-gold text-gold text-xs tracking-[0.3em] mb-6">FOR LOCAL SERVICE BUSINESSES</div>
+            <h1 className="serif text-5xl lg:text-6xl font-semibold leading-tight mb-6">Your customers stopped using Google.</h1>
+            <p className="text-xl text-gray-300 leading-relaxed mb-8 max-w-xl">
+              They're asking <span className="text-gold">ChatGPT, Siri, Alexa, and Gemini</span> for the best local business — and the AI is naming your competitors.
+            </p>
+            <p className="text-lg text-gray-400 mb-10 max-w-xl">Get a free AI-powered Business Audit. We score your visibility across 10 dimensions and show you exactly what's costing you revenue.</p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button onClick={() => navigate('/audit')} className="btn-gold px-8 py-4 serif text-lg tracking-wider">CLAIM YOUR FREE AUDIT →</button>
+            </div>
+            <div className="flex items-center gap-6 mt-8 text-xs text-gray-mid tracking-wider">
+              <span>✓ NO CREDIT CARD</span><span>✓ INSTANT DELIVERY</span><span>✓ CONFIDENTIAL</span>
+            </div>
+          </div>
+          <div className="bg-white p-8 border-4 border-gold shadow-2xl transform lg:rotate-1">
+            <div className="text-xs tracking-widest text-gold mb-2">SAMPLE AUDIT RESULTS</div>
+            <div className="serif text-3xl text-navy font-semibold mb-1">Acme Roofing Co.</div>
+            <div className="text-sm text-gray-mid mb-6">Roofing & Exterior · Chicago, IL</div>
+            <div className="flex items-center gap-6 mb-6">
+              <div className="serif text-7xl font-bold text-navy">37</div>
+              <div>
+                <div className="text-xs tracking-widest text-gold">AI READINESS SCORE</div>
+                <div className="serif text-xl text-gold">Tier: Foundational</div>
+              </div>
+            </div>
+            <div className="space-y-2 mb-6">
+              {[{ n: "AEO / AI Search", s: 15, c: "var(--critical)" }, { n: "Automation", s: 22, c: "var(--critical)" }, { n: "AI Customer Experience", s: 28, c: "var(--critical)" }].map(d => (
+                <div key={d.n}>
+                  <div className="flex justify-between text-xs mb-1"><span className="text-navy font-semibold">{d.n}</span><span className="text-navy font-bold">{d.s}/100</span></div>
+                  <div className="h-2 bg-gray-100"><div className="h-full" style={{ width: d.s + '%', background: d.c }}></div></div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gold pt-4">
+              <div className="text-xs tracking-widest text-gold mb-1">REVENUE AT RISK</div>
+              <div className="serif text-3xl font-bold text-navy">$184K–$258K</div>
+              <div className="text-xs text-gray-mid">annual uplift potential</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section className="bg-gold-soft py-12 border-y border-gold">
+      <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-8 text-center">
+        {[{ n: "31%", l: "of consumer queries now go to AI search" }, { n: "+58%", l: "YoY growth in voice-search 'near me' queries" }, { n: "53%", l: "of mobile visitors leave if site loads >3s" }, { n: "$0", l: "most local businesses spend on AI visibility" }].map((s, i) => (
+          <div key={i}><div className="serif text-5xl font-bold text-navy mb-2">{s.n}</div><div className="text-xs text-gray-mid tracking-wide leading-relaxed">{s.l}</div></div>
+        ))}
+      </div>
+    </section>
+
+    <section className="py-24 px-6 bg-gray-bg">
+      <div className="max-w-6xl mx-auto">
+        <div className="text-center mb-16">
+          <div className="text-xs tracking-[0.3em] text-gold mb-3">THE 10 DIMENSIONS</div>
+          <h2 className="serif text-5xl text-navy font-semibold mb-4">Every gap. Every dollar. Every fix.</h2>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-3">
+          {DIMENSIONS.map(d => (
+            <div key={d.id} className="bg-white border border-gray-200 p-5 card-hover text-center">
+              <div className="text-3xl mb-3">{d.icon}</div>
+              <div className="serif text-sm text-navy font-semibold leading-tight">{d.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section className="py-24 px-6 bg-gold-soft border-y border-gold">
+      <div className="max-w-3xl mx-auto text-center">
+        <h2 className="serif text-5xl text-navy font-semibold mb-6 leading-tight">Stop guessing. Start dominating.</h2>
+        <p className="text-lg text-gray-mid mb-10">Get your free audit. 60 seconds to intake. Delivered within an hour.</p>
+        <button onClick={() => navigate('/audit')} className="btn-primary px-12 py-5 serif text-xl tracking-wider">CLAIM YOUR FREE AUDIT →</button>
+      </div>
+    </section>
+
+    <footer className="bg-navy-dark py-12 px-6 text-center">
+      <div className="text-gold serif text-2xl font-semibold mb-2">[YOUR AGENCY NAME]</div>
+      <div className="text-xs text-gray-mid tracking-widest mb-6">THE AI GENERAL CONTRACTOR FOR LOCAL SERVICE BUSINESSES</div>
+      <div className="text-xs text-gray-mid">© 2026 · <button onClick={() => navigate('/admin')} className="text-gold hover:underline">Admin</button></div>
+    </footer>
+  </div>
+);
+
+// =========================================================================
+// PUBLIC: INTAKE
+// =========================================================================
+const AuditIntake = ({ navigate, onSubmit, submitting }) => {
+  const [form, setForm] = useState({
+    businessName: "", websiteUrl: "", city: "", state: "",
+    industry: "Roofing & Exterior", ownerName: "", email: "", phone: "",
+    monthlyLeads: "", leadValue: "",
+    competitor1: "", competitor2: "", competitor3: "", primaryChallenge: ""
+  });
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const canSubmit = form.businessName && form.websiteUrl && form.city && form.email && form.ownerName && !submitting;
+
+  return (
+    <div className="min-h-screen">
+      <header className="bg-white border-b border-gold py-4 px-6">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <Logo />
+          <button onClick={() => navigate('/')} className="text-sm text-gray-mid hover:text-navy">← Home</button>
+        </div>
+      </header>
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <div className="text-center mb-12">
+          <div className="inline-block px-4 py-1 border border-gold text-gold text-xs tracking-[0.3em] mb-6">FREE · CONFIDENTIAL · INSTANT</div>
+          <h1 className="serif text-5xl text-navy font-semibold mb-4 leading-tight">Get Your AI<br />Business Audit</h1>
+          <p className="text-gray-mid max-w-xl mx-auto">10 dimensions. AI-powered analysis. Delivered within the hour.</p>
+        </div>
+        <div className="bg-white p-10 border border-gold shadow-sm">
+          <div className="mb-8">
+            <div className="text-xs tracking-widest text-gold font-semibold mb-4">SECTION 1 · BUSINESS</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Business Name" required value={form.businessName} onChange={v => update("businessName", v)} />
+              <Field label="Website URL" required value={form.websiteUrl} onChange={v => update("websiteUrl", v)} placeholder="example.com" />
+              <Field label="City" required value={form.city} onChange={v => update("city", v)} />
+              <Field label="State" value={form.state} onChange={v => update("state", v)} placeholder="IL" />
+              <SelectField label="Industry" value={form.industry} onChange={v => update("industry", v)} options={["Roofing & Exterior","HVAC","Plumbing","Electrical","Landscaping","Law Firm (Family)","Law Firm (Personal Injury)","Law Firm (Criminal)","Dental Practice","Medical Practice","Med Spa / Aesthetics","Real Estate","Insurance","Restaurant","Gym / Fitness","Salon / Barbershop","Auto Repair","Consultant","Other"]} />
+              <Field label="Primary Challenge" value={form.primaryChallenge} onChange={v => update("primaryChallenge", v)} />
+            </div>
+          </div>
+          <GoldDivider className="my-8" />
+          <div className="mb-8">
+            <div className="text-xs tracking-widest text-gold font-semibold mb-4">SECTION 2 · CONTACT</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Your Name" required value={form.ownerName} onChange={v => update("ownerName", v)} />
+              <Field label="Email" required value={form.email} onChange={v => update("email", v)} type="email" />
+              <Field label="Phone" value={form.phone} onChange={v => update("phone", v)} type="tel" placeholder="+1 555 555 1234" />
+            </div>
+            <p className="text-xs text-gray-mid mt-3">📱 Adding phone enables instant SMS confirmation (highly recommended)</p>
+          </div>
+          <GoldDivider className="my-8" />
+          <div className="mb-8">
+            <div className="text-xs tracking-widest text-gold font-semibold mb-4">SECTION 3 · REVENUE CONTEXT</div>
+            <p className="text-sm text-gray-mid mb-4">Optional — improves accuracy of revenue projections.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Avg Monthly Leads" value={form.monthlyLeads} onChange={v => update("monthlyLeads", v)} type="number" placeholder="40" />
+              <Field label="Avg Lead Value ($)" value={form.leadValue} onChange={v => update("leadValue", v)} type="number" placeholder="800" />
+            </div>
+          </div>
+          <GoldDivider className="my-8" />
+          <div className="mb-10">
+            <div className="text-xs tracking-widest text-gold font-semibold mb-4">SECTION 4 · COMPETITORS</div>
+            <div className="space-y-3">
+              <Field label="Competitor 1" value={form.competitor1} onChange={v => update("competitor1", v)} />
+              <Field label="Competitor 2" value={form.competitor2} onChange={v => update("competitor2", v)} />
+              <Field label="Competitor 3" value={form.competitor3} onChange={v => update("competitor3", v)} />
+            </div>
+          </div>
+          <button disabled={!canSubmit} onClick={() => onSubmit(form)} className="btn-primary w-full py-4 serif text-lg tracking-wider font-semibold">
+            {submitting ? <span className="flex items-center justify-center gap-2"><span className="spinner"></span>SUBMITTING...</span> : "GENERATE MY AUDIT →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// PUBLIC: PROCESSING + CONFIRMATION
+// =========================================================================
+const AuditConfirmation = ({ navigate, intake, auditId }) => (
+  <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="max-w-xl w-full text-center">
+      <div className="serif text-7xl text-gold mb-6">✓</div>
+      <h2 className="serif text-4xl text-navy font-semibold mb-4">Your audit is in production.</h2>
+      <p className="text-gray-mid mb-8 leading-relaxed">
+        Generating right now using AI analysis across all 10 dimensions.<br />
+        Your full report will arrive at <strong className="text-navy">{intake.email}</strong> within the hour.
+      </p>
+      <div className="bg-white border border-gold p-6 mb-8 text-left">
+        <div className="text-xs tracking-widest text-gold mb-3">WHAT HAPPENS NEXT</div>
+        <ul className="space-y-3 text-sm text-navy">
+          <li className="flex items-start gap-3"><span className="text-gold font-bold mt-0.5">①</span><span>{intake.phone ? "Instant SMS confirmation just sent to your phone" : "Confirmation email arriving in your inbox now"}</span></li>
+          <li className="flex items-start gap-3"><span className="text-gold font-bold mt-0.5">②</span><span>AI runs 10-dimension analysis (~60 seconds)</span></li>
+          <li className="flex items-start gap-3"><span className="text-gold font-bold mt-0.5">③</span><span>Full audit + revenue projection delivered to your inbox</span></li>
+          <li className="flex items-start gap-3"><span className="text-gold font-bold mt-0.5">④</span><span>You'll get a calendar link to book a 30-min strategy call</span></li>
+        </ul>
+      </div>
+      <button onClick={() => navigate('/')} className="btn-ghost px-8 py-3 text-sm tracking-wider">← BACK TO HOME</button>
+      <p className="text-xs text-gray-mid mt-6">Audit ID: <code className="text-navy">{auditId}</code></p>
+    </div>
+  </div>
+);
+
+// =========================================================================
+// ADMIN: AUTH GATE
+// =========================================================================
