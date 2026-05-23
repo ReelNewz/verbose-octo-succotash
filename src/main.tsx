@@ -1,50 +1,34 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { LandingPage } from "@/pages/LandingPage";
+import { AuditPage } from "@/pages/AuditPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { DashboardPage } from "@/pages/DashboardPage";
+import { AdminAccessPage } from "@/pages/AdminAccessPage";
 import "@/index.css";
-
-function LoginPage() {
-  return <div className="flex h-screen items-center justify-center"><p>Login page</p></div>;
-}
-
-function DashboardPage() {
-  return <div className="flex h-screen items-center justify-center"><p>Dashboard (authenticated)</p></div>;
-}
-
-function AdminPage() {
-  return <div className="flex h-screen items-center justify-center"><p>Admin panel</p></div>;
-}
-
-function AdminAccessPage() {
-  return <div className="flex h-screen items-center justify-center"><p>Request admin access</p></div>;
-}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/audit/:id" element={<AuditPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin-access" element={<AdminAccessPage />} />
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute adminOnly>
                 <DashboardPage />
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/" element={<Link to="/dashboard">Go to dashboard</Link>} />
+          <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
