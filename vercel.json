@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/submit-audit.js": { "maxDuration": 60 },
+    "api/cron-follow-up.js": { "maxDuration": 30 },
+    "api/analyze.py": { "runtime": "python3.12" }
+  },
+  "crons": [
+    { "path": "/api/cron-follow-up", "schedule": "0 9 * * 1-5" }
+  ]
+}
