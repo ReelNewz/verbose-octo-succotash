@@ -3,11 +3,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { LoginPage } from "@/components/LoginPage";
 import "@/index.css";
-
-function LoginPage() {
-  return <div className="flex h-screen items-center justify-center"><p>Login page</p></div>;
-}
 
 function DashboardPage() {
   return <div className="flex h-screen items-center justify-center"><p>Dashboard (authenticated)</p></div>;
